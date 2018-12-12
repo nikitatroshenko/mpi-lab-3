@@ -5,5 +5,5 @@ set(CMAKE_C_STANDARD 90)
 
 set(CMAKE_C_COMPILER mpicc)
 
-add_executable(mpi_lab_1
+add_executable(mpi-lab-3
         main.c)
