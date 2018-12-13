@@ -4,10 +4,6 @@
 #include <memory.h>
 #include <assert.h>
 
-#define BLOCK_SIZE 2
-#define MPI_RESULT_MSG_TAG 322
-
-
 struct task_specification {
 	int rows_cnt;
 	int cols_cnt;
@@ -17,19 +13,6 @@ struct configuration {
 	int strip_len;        /* number of rows in a strip */
 	int block_size;        /* number of columns in a block */
 };
-
-
-void init_block(int *data,
-		int cols_cnt,
-		int strip_len,
-		int block_size)
-{
-	for (int i = 1; i < strip_len; i++) {
-		for (int j = 0; j < block_size; j++) {
-			data[i * cols_cnt + j] = data[(i - 1) * cols_cnt + j] + 1;
-		}
-	}
-}
 
 void compute_routine(
 	int world_size,
@@ -41,7 +24,6 @@ void compute_routine(
 	int *recvbuf = calloc(config->block_size, sizeof *recvbuf);
 	MPI_Request send_request;
 	MPI_Request recv_request;
-	MPI_Status status;
 	int source = (world_rank == 0) ? 0 : world_rank - 1;
 	int destination = (world_rank + 1) % world_size;
 	int block_size = (spec->cols_cnt >= config->block_size) ? config->block_size : spec->cols_cnt;
@@ -61,13 +43,13 @@ void compute_routine(
 			  MPI_COMM_WORLD,
 			  &recv_request);
 
-		for (int i = 1; i < config->strip_len; i++) {
+		for (int i = 1; i <= config->strip_len; i++) {
 			for (int k = 0; k < block_size; k++) {
 				data[i * spec->cols_cnt + k + j] = data[(i - 1) * spec->cols_cnt + k + j] + 1;
 			}
 		}
 
-		MPI_Isend(data + (config->strip_len - 1) * spec->cols_cnt,
+		MPI_Isend(data + config->strip_len * spec->cols_cnt + j,
 			  block_size,
 			  MPI_INT,
 			  destination,
@@ -93,7 +75,7 @@ int main(int argc, char **argv)
 
 	const struct configuration config = {spec.rows_cnt / world_size, 3};
 
-	process_data = calloc(config.strip_len * spec.cols_cnt, sizeof *process_data);
+	process_data = calloc((config.strip_len + 1) * spec.cols_cnt, sizeof *process_data);
 	if (world_rank == 0) {
 		MPI_Request request;
 
