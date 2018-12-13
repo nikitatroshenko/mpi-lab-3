@@ -57,6 +57,8 @@ void compute_routine(
 			  MPI_COMM_WORLD,
 			  &send_request);
 	}
+
+	free(recvbuf);
 }
 
 int main(int argc, char **argv)
@@ -73,16 +75,21 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-	const struct configuration config = {spec.rows_cnt / world_size, 3};
+	const struct configuration config = {
+		((spec.rows_cnt - 1) % world_size) ? spec.rows_cnt / world_size + 1 : spec.rows_cnt / world_size,
+		3
+	};
 
 	process_data = calloc((config.strip_len + 1) * spec.cols_cnt, sizeof *process_data);
 	if (world_rank == 0) {
 		MPI_Request request;
 
+		gathered_data = calloc((config.strip_len * world_size) * spec.cols_cnt, sizeof *gathered_data);
+		memcpy(gathered_data, first_row, spec.cols_cnt * sizeof *gathered_data);
 		for (int i = 0; i < spec.cols_cnt; i += config.block_size) {
 			int block_size = (spec.cols_cnt - i >= config.block_size) ? config.block_size : spec.cols_cnt - i;
 
-			MPI_Isend(first_row + i,
+			MPI_Isend(gathered_data + i,
 				  block_size,
 				  MPI_INT,
 				  0,
@@ -91,14 +98,13 @@ int main(int argc, char **argv)
 				  &request);
 			MPI_Request_free(&request);
 		}
-		gathered_data = calloc(spec.rows_cnt * spec.cols_cnt, sizeof *gathered_data);
 	}
 	compute_routine(world_size, world_rank, process_data, &spec, &config);
 
-	MPI_Gather(process_data,
+	MPI_Gather(process_data + spec.cols_cnt,
 		   config.strip_len * spec.cols_cnt,
 		   MPI_INT,
-		   gathered_data,
+		   gathered_data + spec.cols_cnt,
 		   config.strip_len * spec.cols_cnt,
 		   MPI_INT,
 		   0,
@@ -113,6 +119,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-
+	free(process_data);
+	free(gathered_data);
 	MPI_Finalize();
 }
