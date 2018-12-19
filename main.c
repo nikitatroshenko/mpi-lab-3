@@ -56,6 +56,7 @@ void compute_routine(
 			  j,
 			  MPI_COMM_WORLD,
 			  &send_request);
+		MPI_Request_free(&send_request);
 	}
 
 	free(recvbuf);
@@ -76,8 +77,10 @@ int main(int argc, char **argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	const struct configuration config = {
-		((spec.rows_cnt - 1) % world_size) ? spec.rows_cnt / world_size + 1 : spec.rows_cnt / world_size,
-		3
+		((spec.rows_cnt - 1) % world_size)		/* strip_len */
+			? spec.rows_cnt / world_size + 1
+			: spec.rows_cnt / world_size,
+		3						/* block_size */
 	};
 
 	process_data = calloc((config.strip_len + 1) * spec.cols_cnt, sizeof *process_data);
@@ -87,7 +90,9 @@ int main(int argc, char **argv)
 		gathered_data = calloc((config.strip_len * world_size) * spec.cols_cnt, sizeof *gathered_data);
 		memcpy(gathered_data, first_row, spec.cols_cnt * sizeof *gathered_data);
 		for (int i = 0; i < spec.cols_cnt; i += config.block_size) {
-			int block_size = (spec.cols_cnt - i >= config.block_size) ? config.block_size : spec.cols_cnt - i;
+			int block_size = (spec.cols_cnt - i >= config.block_size)
+				? config.block_size
+				: spec.cols_cnt - i;
 
 			MPI_Isend(gathered_data + i,
 				  block_size,
